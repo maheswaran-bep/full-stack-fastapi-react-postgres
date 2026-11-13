@@ -1,0 +1,56 @@
+
+services:
+
+  postgres:
+    image: postgres:16-alpine
+    container_name: notes-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: notes_db
+      POSTGRES_USER: notes_user
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U notes_user -d notes_db"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - notes-network
+
+  backend:
+    build:
+      context: .
+      dockerfile: backend/Dockerfile
+    container_name: notes-backend
+    restart: unless-stopped
+    environment:
+      DATABASE_URL: postgresql://notes_user:${POSTGRES_PASSWORD}@postgres:5432/notes_db
+    ports:
+      - "8025:8000"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    networks:
+      - notes-network
+
+  frontend:
+    build:
+      context: .
+      dockerfile: frontend/Dockerfile
+    container_name: notes-frontend
+    restart: unless-stopped
+    ports:
+      - "3025:80"
+    depends_on:
+      - backend
+    networks:
+      - notes-network
+
+volumes:
+  postgres_data:
+
+networks:
+  notes-network:
+    driver: bridge
