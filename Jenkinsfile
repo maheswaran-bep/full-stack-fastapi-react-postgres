@@ -17,19 +17,37 @@ pipeline {
 
         stage('Validate Docker Compose') {
             steps {
-                sh 'docker compose config'
+                withCredentials([
+                    string(credentialsId: 'postgres-password',
+                           variable: 'POSTGRES_PASSWORD')
+                ]) {
+                    sh 'docker compose config --quiet'
+                }
             }
         }
 
         stage('Build Images') {
             steps {
-                sh 'docker compose build'
+                withCredentials([
+                    string(credentialsId: 'postgres-password',
+                           variable: 'POSTGRES_PASSWORD')
+                ]) {
+                    sh '''
+                        docker compose build \
+                          --progress=plain
+                    '''
+                }
             }
         }
 
         stage('Deploy Application') {
             steps {
-                sh 'docker compose up -d'
+                withCredentials([
+                    string(credentialsId: 'postgres-password',
+                           variable: 'POSTGRES_PASSWORD')
+                ]) {
+                    sh 'docker compose up -d'
+                }
             }
         }
 
@@ -37,8 +55,19 @@ pipeline {
             steps {
                 sh '''
                     docker compose ps
-                    docker logs --tail=50 notes-backend
-                    docker logs --tail=50 notes-frontend
+
+                    docker inspect notes-postgres \
+                      --format='PostgreSQL: {{.State.Status}}'
+
+                    docker inspect notes-backend \
+                      --format='Backend: {{.State.Status}}'
+
+                    docker inspect notes-frontend \
+                      --format='Frontend: {{.State.Status}}'
+
+                    docker logs --tail=30 notes-backend
+
+                    docker logs --tail=30 notes-frontend
                 '''
             }
         }
@@ -47,10 +76,14 @@ pipeline {
     post {
         success {
             echo 'Full Stack application deployed successfully!'
+            echo 'Frontend: http://localhost:3025'
+            echo 'Backend:  http://localhost:8025/docs'
         }
+
         failure {
             echo 'Pipeline failed. Check Jenkins console output.'
         }
+
         always {
             sh 'docker compose ps || true'
         }
